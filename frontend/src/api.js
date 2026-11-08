@@ -1,12 +1,20 @@
-import { API_BASE_URL, API_REQUEST_TIMEOUT_MS } from './config';
+
+export const API_BASE_URL = "https://threatgraph-backend.onrender.com";
+export const API_REQUEST_TIMEOUT_MS = 15000;
 
 async function request(path, options = {}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(
+    () => controller.abort(),
+    API_REQUEST_TIMEOUT_MS
+  );
 
   const headers = { ...(options.headers || {}) };
-  if (options.body) {
-    headers['Content-Type'] = 'application/json';
+
+  // Do not set JSON Content-Type for FormData.
+  // Browser automatically sets the multipart boundary.
+  if (options.body && !(options.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
   }
 
   try {
@@ -17,8 +25,9 @@ async function request(path, options = {}) {
     });
 
     let payload = null;
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
+    const contentType = response.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
       payload = await response.json();
     } else {
       const text = await response.text();
@@ -30,21 +39,28 @@ async function request(path, options = {}) {
         payload?.detail ||
         payload?.error ||
         `Request failed with status ${response.status}.`;
+
       throw new Error(
-        typeof detail === 'string' ? detail : JSON.stringify(detail),
+        typeof detail === "string"
+          ? detail
+          : JSON.stringify(detail)
       );
     }
 
     return payload;
   } catch (error) {
-    if (error.name === 'AbortError') {
-      throw new Error('The backend did not respond in time. Try again.');
-    }
-    if (error instanceof TypeError) {
+    if (error.name === "AbortError") {
       throw new Error(
-        `Cannot reach the backend at ${API_BASE_URL}. Check that the API is running and that VITE_API_BASE_URL is correct.`,
+        "The backend did not respond in time. Try again."
       );
     }
+
+    if (error instanceof TypeError) {
+      throw new Error(
+        `Cannot reach the backend at ${API_BASE_URL}. Check that the API is running and CORS is configured correctly.`
+      );
+    }
+
     throw error;
   } finally {
     clearTimeout(timeout);
@@ -53,47 +69,96 @@ async function request(path, options = {}) {
 
 function buildQuery(params) {
   const query = new URLSearchParams();
+
   Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
+    if (
+      value !== undefined &&
+      value !== null &&
+      value !== ""
+    ) {
       query.set(key, value);
     }
   });
+
   const value = query.toString();
-  return value ? `?${value}` : '';
+  return value ? `?${value}` : "";
 }
 
 export const api = {
-  health: () => request('/'),
-  dashboard: () => request('/api/dashboard'),
-  events: () => request('/api/events'),
-  alerts: () => request('/api/alerts'),
+  health: () => request("/"),
+  dashboard: () => request("/api/dashboard"),
+  events: () => request("/api/events"),
+  alerts: () => request("/api/alerts"),
+
   filterAlerts: ({ riskLevel, reviewStatus } = {}) =>
     request(
       `/api/alerts/filter${buildQuery({
         risk_level: riskLevel,
         review_status: reviewStatus,
-      })}`,
+      })}`
     ),
+
   reviewAlert: (eventId, status) =>
     request(
       `/api/alerts/${eventId}/review${buildQuery({ status })}`,
-      { method: 'PATCH' },
+      { method: "PATCH" }
     ),
+
   responseAdvice: (eventId) =>
     request(`/api/alerts/${eventId}/response`),
-  timeline: () => request('/api/timeline'),
+
+  timeline: () => request("/api/timeline"),
+
   investigate: (ipAddress) =>
-    request(`/api/investigate/${encodeURIComponent(ipAddress)}`),
-  graph: () => request('/api/graph'),
+    request(
+      `/api/investigate/${encodeURIComponent(ipAddress)}`
+    ),
+
+  graph: () => request("/api/graph"),
+
   correlation: (windowMinutes = 60) =>
-    request(`/api/correlation${buildQuery({ window_minutes: windowMinutes })}`),
-  loginTimeline: () => request('/api/login-timeline'),
+    request(
+      `/api/correlation${buildQuery({
+        window_minutes: windowMinutes,
+      })}`
+    ),
+
+  loginTimeline: () =>
+    request("/api/login-timeline"),
+
   attackPatterns: (windowMinutes = 60) =>
-    request(`/api/attack-patterns${buildQuery({ window_minutes: windowMinutes })}`),
+    request(
+      `/api/attack-patterns${buildQuery({
+        window_minutes: windowMinutes,
+      })}`
+    ),
+
   analyze: (event) =>
-    request('/api/analyze', { method: 'POST', body: JSON.stringify(event) }),
+    request("/api/analyze", {
+      method: "POST",
+      body: JSON.stringify(event),
+    }),
+
   simulate: (event) =>
-    request('/api/simulate', { method: 'POST', body: JSON.stringify(event) }),
+    request("/api/simulate", {
+      method: "POST",
+      body: JSON.stringify(event),
+    }),
+
   addLoginEvent: (event) =>
-    request('/api/login-event', { method: 'POST', body: JSON.stringify(event) }),
+    request("/api/login-event", {
+      method: "POST",
+      body: JSON.stringify(event),
+    }),
+
+  // Upload CSV directly to Render backend.
+  uploadCsv: (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    return request("/api/upload-csv", {
+      method: "POST",
+      body: formData,
+    });
+  },
 };

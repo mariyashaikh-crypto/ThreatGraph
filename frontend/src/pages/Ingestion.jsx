@@ -9,6 +9,7 @@ import {
   InfoCallout,
   PageIntro,
 } from '../components/ui';
+import { api } from '../api';
 import {
   downloadCsvTemplate,
   EXPECTED_EVENT_FIELDS,
@@ -28,26 +29,32 @@ function formatFileSize(bytes) {
 
 export default function Ingestion() {
   const inputRef = useRef(null);
+
   const [dragging, setDragging] = useState(false);
   const [fileInfo, setFileInfo] = useState(null);
   const [validation, setValidation] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
 
   async function handleFile(file) {
     if (!file) return;
 
     setFileInfo(null);
     setValidation(null);
+    setUploadResult(null);
 
     const errors = [];
 
     if (!file.name.toLowerCase().endsWith('.csv')) {
       errors.push('The selected file must use the .csv extension.');
     }
+
     if (file.size === 0) {
       errors.push('The selected file is empty.');
     }
+
     if (file.size > MAX_FILE_SIZE) {
-      errors.push('The selected file is larger than the 5 MB local preview limit.');
+      errors.push('The selected file is larger than the 5 MB upload limit.');
     }
 
     if (errors.length) {
@@ -76,18 +83,20 @@ export default function Ingestion() {
       }
 
       setFileInfo({
+        file,
         name: file.name,
         size: file.size,
         headers: parsed.headers,
         rows: parsed.rows,
         missingFields: parsed.missingFields,
       });
+
       setValidation({
         type: 'success',
         messages: [
           `${formatNumber(parsed.rows.length)} record${
             parsed.rows.length === 1 ? '' : 's'
-          } parsed locally.`,
+          } parsed successfully. Ready to upload.`,
         ],
       });
     } catch (error) {
@@ -95,6 +104,36 @@ export default function Ingestion() {
         type: 'error',
         messages: [`The file could not be read: ${error.message}`],
       });
+    }
+  }
+
+  async function handleUpload() {
+    if (!fileInfo?.file || uploading) return;
+
+    setUploading(true);
+    setUploadResult(null);
+    setValidation(null);
+
+    try {
+      const result = await api.uploadCsv(fileInfo.file);
+
+      setUploadResult(result);
+
+      setValidation({
+        type: result.failed_rows > 0 ? 'error' : 'success',
+        messages: [
+          result.message || 'CSV processing completed.',
+          `${result.successful_rows} records uploaded successfully.`,
+          `${result.failed_rows} records failed.`,
+        ],
+      });
+    } catch (error) {
+      setValidation({
+        type: 'error',
+        messages: [error.message || 'CSV upload failed. Please try again.'],
+      });
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -107,6 +146,7 @@ export default function Ingestion() {
   function handleDrop(event) {
     event.preventDefault();
     setDragging(false);
+
     const file = event.dataTransfer.files?.[0];
     handleFile(file);
   }
@@ -114,13 +154,17 @@ export default function Ingestion() {
   function clearFile() {
     setFileInfo(null);
     setValidation(null);
-    if (inputRef.current) inputRef.current.value = '';
+    setUploadResult(null);
+
+    if (inputRef.current) {
+      inputRef.current.value = '';
+    }
   }
 
   return (
     <div className="page-stack">
       <PageIntro
-        description="Prepare and inspect event data before analysis."
+        description="Upload event data to the backend for real-time risk analysis."
         eyebrow="Data preparation"
         title="Event Ingestion"
         actions={
@@ -132,13 +176,13 @@ export default function Ingestion() {
 
       <InfoCallout
         icon="info"
-        title="CSV upload is currently a local preview only"
-        tone="warning"
+        title="CSV upload is connected to the backend"
+        tone="info"
       >
         <p>
-          The backend does not expose a CSV ingestion endpoint. Files selected here
-          are parsed in your browser for preview and are <strong>not uploaded</strong>,
-          stored, or analyzed. No upload status is simulated.
+          Select a CSV file to preview its contents, then click{' '}
+          <strong>Upload & Analyze</strong> to send it to the backend. The
+          backend processes the records and calculates their risk scores.
         </p>
       </InfoCallout>
 
@@ -146,8 +190,8 @@ export default function Ingestion() {
         <Card>
           <CardHeader
             icon="upload"
-            subtitle="Drag a CSV file here or use Browse Files to validate it locally."
-            title="CSV File Preview"
+            subtitle="Drag a CSV file here or use Browse Files."
+            title="CSV File Upload"
           />
 
           <div
@@ -158,7 +202,9 @@ export default function Ingestion() {
             }}
             onDragLeave={(event) => {
               event.preventDefault();
-              if (event.currentTarget === event.target) setDragging(false);
+              if (event.currentTarget === event.target) {
+                setDragging(false);
+              }
             }}
             onDragOver={(event) => {
               event.preventDefault();
@@ -169,11 +215,14 @@ export default function Ingestion() {
             <span className="dropzone__icon">
               <Icon name="file" size={30} />
             </span>
-            <h3>Drop a CSV file to inspect it</h3>
+
+            <h3>Drop a CSV file to upload</h3>
+
             <p>
-              The file never leaves this browser. Preview limit: 5 MB. Supported
-              extension: <span className="mono">.csv</span>
+              Maximum file size: 5 MB. Supported extension:{' '}
+              <span className="mono">.csv</span>
             </p>
+
             <div className="dropzone__actions">
               <Button
                 icon="upload"
@@ -182,6 +231,7 @@ export default function Ingestion() {
               >
                 Browse Files
               </Button>
+
               <input
                 accept=".csv,text/csv"
                 className="visually-hidden"
@@ -189,9 +239,10 @@ export default function Ingestion() {
                 ref={inputRef}
                 type="file"
               />
+
               {fileInfo ? (
                 <Button icon="close" onClick={clearFile} variant="ghost">
-                  Clear preview
+                  Clear file
                 </Button>
               ) : null}
             </div>
@@ -206,9 +257,10 @@ export default function Ingestion() {
                 name={validation.type === 'error' ? 'xCircle' : 'checkCircle'}
                 size={18}
               />
+
               <div>
-                {validation.messages.map((message) => (
-                  <p key={message}>{message}</p>
+                {validation.messages.map((message, index) => (
+                  <p key={`${message}-${index}`}>{message}</p>
                 ))}
               </div>
             </div>
@@ -220,6 +272,7 @@ export default function Ingestion() {
                 <span className="file-summary__icon">
                   <Icon name="file" size={19} />
                 </span>
+
                 <div>
                   <strong>{fileInfo.name}</strong>
                   <span>
@@ -229,20 +282,33 @@ export default function Ingestion() {
                   </span>
                 </div>
               </div>
+
               <div className="file-summary__badges">
-                <Badge tone="info">Local preview</Badge>
-                <Badge tone="neutral">Not uploaded</Badge>
-                <Badge tone="pending">Analysis: not submitted</Badge>
+                <Badge tone="info">Preview ready</Badge>
+                <Badge tone="pending">
+                  {uploadResult ? 'Upload completed' : 'Awaiting upload'}
+                </Badge>
               </div>
+
+              <Button
+                className="button-block"
+                icon="upload"
+                onClick={handleUpload}
+                disabled={uploading}
+                variant="primary"
+              >
+                {uploading ? 'Uploading and analyzing...' : 'Upload & Analyze'}
+              </Button>
             </div>
           ) : null}
 
           {fileInfo?.missingFields?.length ? (
             <p className="section-note">
-              These backend-recognized fields were not found in the CSV header:{' '}
-              <span className="mono">{fileInfo.missingFields.join(', ')}</span>.
-              The file can still be previewed, but it may not match a supported
-              event schema.
+              These recognized fields were not found in the CSV header:{' '}
+              <span className="mono">
+                {fileInfo.missingFields.join(', ')}
+              </span>
+              . The backend will validate the required columns during upload.
             </p>
           ) : null}
         </Card>
@@ -250,36 +316,43 @@ export default function Ingestion() {
         <Card>
           <CardHeader
             icon="scan"
-            subtitle="Field names recognized by the existing backend schemas."
+            subtitle="Fields supported by the existing backend."
             title="Supported Fields"
           />
+
           <div className="field-group">
             <h3>Event analysis</h3>
             <p>Used by POST /api/analyze and POST /api/simulate.</p>
+
             <div className="field-chips">
               {EXPECTED_EVENT_FIELDS.map((field) => (
                 <code key={field}>{field}</code>
               ))}
             </div>
           </div>
+
           <div className="field-group">
             <h3>Login events</h3>
             <p>Used by POST /api/login-event.</p>
+
             <div className="field-chips">
               {EXPECTED_LOGIN_FIELDS.map((field) => (
                 <code key={field}>{field}</code>
               ))}
             </div>
           </div>
+
           <div className="field-group">
-            <h3>Local validation rules</h3>
+            <h3>Upload validation rules</h3>
             <ul className="compact-list">
-              <li>Extension must be .csv.</li>
+              <li>File extension must be .csv.</li>
               <li>File must not be empty.</li>
-              <li>Maximum preview size is 5 MB.</li>
-              <li>A header row and at least one data row are required.</li>
+              <li>Maximum file size is 5 MB.</li>
+              <li>Header row and data records are required.</li>
+              <li>Backend validates required event columns.</li>
             </ul>
           </div>
+
           <Button
             className="button-block"
             icon="download"
@@ -291,19 +364,79 @@ export default function Ingestion() {
         </Card>
       </div>
 
+      {uploadResult ? (
+        <Card>
+          <CardHeader
+            icon="activity"
+            subtitle="Results returned by the backend."
+            title="CSV Analysis Results"
+          />
+
+          <div className="file-summary__badges">
+            <Badge tone="info">
+              Total: {uploadResult.total_rows}
+            </Badge>
+            <Badge tone="success">
+              Successful: {uploadResult.successful_rows}
+            </Badge>
+            <Badge tone={uploadResult.failed_rows > 0 ? 'danger' : 'neutral'}>
+              Failed: {uploadResult.failed_rows}
+            </Badge>
+          </div>
+
+          {uploadResult.events?.length ? (
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>IP Address</th>
+                    <th>Risk Score</th>
+                    <th>Risk Level</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {uploadResult.events.map((event) => (
+                    <tr key={event.id}>
+                      <td>{event.user_id}</td>
+                      <td>{event.ip_address}</td>
+                      <td>{event.risk_score}</td>
+                      <td>{event.risk_level}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
+          {uploadResult.errors?.length ? (
+            <div className="section-note">
+              <strong>Upload errors:</strong>
+              {uploadResult.errors.map((error, index) => (
+                <p key={index}>
+                  Row {error.row}: {error.error}
+                </p>
+              ))}
+            </div>
+          ) : null}
+        </Card>
+      ) : null}
+
       <Card padded={false}>
         <div className="card-padded-header">
           <CardHeader
             actions={
               fileInfo ? (
                 <Badge tone="info">
-                  Showing first {formatNumber(Math.min(fileInfo.rows.length, 100))} of{' '}
+                  Showing first{' '}
+                  {formatNumber(Math.min(fileInfo.rows.length, 100))} of{' '}
                   {formatNumber(fileInfo.rows.length)}
                 </Badge>
               ) : null
             }
             icon="activity"
-            subtitle="Parsed locally from the selected file. No data has been submitted."
+            subtitle="Preview of the selected CSV file."
             title="Event Preview"
           />
         </div>
@@ -319,10 +452,12 @@ export default function Ingestion() {
                   ))}
                 </tr>
               </thead>
+
               <tbody>
                 {fileInfo.rows.slice(0, 100).map((row, index) => (
                   <tr key={`row-${index}`}>
                     <td className="row-number">{index + 1}</td>
+
                     {fileInfo.headers.map((header) => (
                       <td key={`${header}-${index}`}>
                         {row[header] === '' ? (
