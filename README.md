@@ -50,29 +50,25 @@ Built as part of the **KALPAK 2K26 – Campus Cup 4-Hour Hackathon**, ThreatGrap
 
 Visualize connections between user accounts and IP addresses to identify potentially related suspicious activities.
 
-![ThreatGraph Attack Relationship Graph](<img width="1917" height="910" alt="Screenshot 2026-11-01 125744" src="https://github.com/user-attachments/assets/f372c38c-6973-4df7-8d10-f86ca25b9d9e" />
-)
+<img width="1917" height="910" alt="Screenshot 2026-11-01 125744" src="https://github.com/user-attachments/assets/f372c38c-6973-4df7-8d10-f86ca25b9d9e" />
 
 ### 2. Attack Timeline
 
 Explore security incidents chronologically and inspect their associated risk levels and detection reasons.
 
-![ThreatGraph Attack Timeline](<img width="1917" height="912" alt="Screenshot 2026-11-01 124027" src="https://github.com/user-attachments/assets/5297f147-79ea-4afe-96ce-777a5a134067" />
-)
+<img width="1917" height="912" alt="Screenshot 2026-11-01 124027" src="https://github.com/user-attachments/assets/5297f147-79ea-4afe-96ce-777a5a134067" />
 
 ### 3. Investigation Details
 
 Examine individual incidents, understand risk scores, review triggered detection rules, and view recommended responses.
 
-![ThreatGraph Investigation Details](<img width="1917" height="917" alt="Screenshot 2026-11-01 124041" src="https://github.com/user-attachments/assets/32a81dce-93e6-4ef5-9059-201b104f210c" />
-)
+<img width="1917" height="917" alt="Screenshot 2026-11-01 124041" src="https://github.com/user-attachments/assets/32a81dce-93e6-4ef5-9059-201b104f210c" />
 
 ### 4. Security Alerts
 
 Search, filter, sort, and review suspicious events based on severity, risk level, and review status.
 
-![ThreatGraph Security Alerts](<img width="1917" height="912" alt="Screenshot 2026-11-01 124056" src="https://github.com/user-attachments/assets/82269e77-f08c-4737-a948-ffddf7eeba3d" />
-)
+<img width="1917" height="912" alt="Screenshot 2026-11-01 124056" src="https://github.com/user-attachments/assets/82269e77-f08c-4737-a948-ffddf7eeba3d" />
 
 ---
 
